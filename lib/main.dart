@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_sample/qr_code_reader_page.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter_plus/webview_flutter_plus.dart';
 
 import 'command_b_page.dart';
@@ -55,7 +56,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   // ignore: unused_field
-  WebViewPlusController? _controller; // WebViewコントローラー
+  late WebViewPlusController _controller; // WebViewコントローラー
 
   //■assetsへの接続
   static const String APPLICATION_URI = 'assets/app/';
@@ -71,34 +72,42 @@ class _MyHomePageState extends State<MyHomePage> {
           javascriptMode: JavascriptMode.unrestricted,
           onWebViewCreated: (controller) {
             _controller = controller;
-            _controller?.loadUrl(APPLICATION_URI);
+            _controller.loadUrl(APPLICATION_URI);
           },
           javascriptChannels: <JavascriptChannel>{
             JavascriptChannel(
                 name: "__javascriptChannel",
-                onMessageReceived: (JavascriptMessage result) async {
-                  Map<String, dynamic> jsonMap = json.decode(result.message);
-                  var request = Request.fromJson(jsonMap);
-                  switch (request.command) {
-                    case "a":
-                      _commandA(request);
-                      break;
-                    case "getQrStringFromCamera":
-                      await _commandB(request);
-                      break;
+                onMessageReceived: (JavascriptMessage message) async {
+                  String? url =
+                      await _controller.webViewController.currentUrl();
+                  if (url != null && _isAllowUrl(url)) {
+                    Map<String, dynamic> jsonMap = json.decode(message.message);
+                    var request = Request.fromJson(jsonMap);
+                    switch (request.command) {
+                      case "a":
+                        _commandA(request);
+                        break;
+                      case "getQrStringFromCamera":
+                        await _commandB(request);
+                        break;
+                    }
                   }
-
-                  // ScaffoldMessenger.of(context)
-                  //     .showSnackBar(SnackBar(content: Text(result.message)));
                 })
           },
-          onPageFinished: (uri) {
+          onPageStarted: (String url) {
+            //todo ★許可されたページ以外を外部ブラウザで起動するなどの処置
+            // if (!_isAllowUrl(url)) {
+            //   _controller.webViewController.goBack();
+            //   launchUrl(Uri.parse(url));
+            // }
+          },
+          onPageFinished: (url) {
             //■URLがAPPLICATION_URIである場合、初期化コードを実行する。
-            // if (uri == APPLICATION_URI) {//★一考
-            _controller?.webViewController.runJavascript("""
+            if (_isAllowUrl(url)) {
+              _controller.webViewController.runJavascript("""
 window.__suppoetedCommands = ["a", "getQrStringFromCamera"];
               """);
-            // }
+            }
           }),
     );
   }
@@ -106,7 +115,7 @@ window.__suppoetedCommands = ["a", "getQrStringFromCamera"];
   ///SPAにレスポンスを返却する
   void _returnCommand(String requestId, dynamic result) {
     var encordedResult = jsonEncode(result);
-    _controller?.webViewController.runJavascript("""
+    _controller.webViewController.runJavascript("""
 __nativecallback('$requestId', $encordedResult);
               """);
   }
@@ -124,6 +133,11 @@ __nativecallback('$requestId', $encordedResult);
 
     _returnCommand(request.requestId, result);
     // _returnCommand(request.requestId, "Coomand B.");
+  }
+
+  bool _isAllowUrl(String url) {
+    //todo ★適当な実装("localhost"が含まれているかどうか)
+    return url.startsWith("http://localhost");
   }
 }
 
