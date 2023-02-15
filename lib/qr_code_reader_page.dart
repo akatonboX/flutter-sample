@@ -79,7 +79,10 @@ class _QRCodeReaderPageState extends State<QRCodeReaderPage> {
       this.controller = controller;
     });
     controller.scannedDataStream.listen((scanData) {
-      Navigator.pop(context, scanData.code);
+      if (Navigator.canPop(context)) {
+        //複数回呼ばれるため、制御
+        Navigator.pop(context, scanData.code);
+      }
     });
   }
 
