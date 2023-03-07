@@ -1,11 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_sample/qr_code_reader_page.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter_plus/webview_flutter_plus.dart';
-
-import 'command_b_page.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
   runApp(const MyApp());
@@ -55,115 +49,26 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  // ignore: unused_field
-  late WebViewPlusController _controller; // WebViewコントローラー
+  late final WebViewController _controller; // WebViewコントローラー
 
-  //■assetsへの接続
-  static const String APPLICATION_URI = 'assets/app/';
-  //■react(yarn start)への接続
-  //※adb reverse tcp:3000 tcp:3000で、ポートフォーワードすること
-  // ignore: constant_identifier_names
-  // static const String APPLICATION_URI = 'http://localhost:3000';
+  @override
+  void initState() {
+    super.initState();
+
+    // #docregion webview_controller
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
+      ..loadRequest(
+          Uri.parse('https://akatonbox.github.io/ts-react-mailer-sample/'));
+    // #enddocregion webview_controller
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('ヘッダ3')),
-      body: WebViewPlus(
-          javascriptMode: JavascriptMode.unrestricted,
-          onWebViewCreated: (controller) {
-            _controller = controller;
-            _controller.loadUrl(APPLICATION_URI);
-          },
-          javascriptChannels: <JavascriptChannel>{
-            JavascriptChannel(
-                name: "__javascriptChannel",
-                onMessageReceived: (JavascriptMessage message) async {
-                  String? url =
-                      await _controller.webViewController.currentUrl();
-                  if (url != null && _isAllowUrl(url)) {
-                    Map<String, dynamic> jsonMap = json.decode(message.message);
-                    var request = Request.fromJson(jsonMap);
-                    switch (request.command) {
-                      case "a":
-                        _commandA(request);
-                        break;
-                      case "getQrStringFromCamera":
-                        await _commandB(request);
-                        break;
-                    }
-                  }
-                })
-          },
-          onPageStarted: (String url) {
-            //todo ★許可されたページ以外を外部ブラウザで起動するなどの処置
-            // if (!_isAllowUrl(url)) {
-            //   _controller.webViewController.goBack();
-            //   launchUrl(Uri.parse(url));
-            // }
-          },
-          onPageFinished: (url) {
-            //■URLがAPPLICATION_URIである場合、初期化コードを実行する。
-            if (_isAllowUrl(url)) {
-              _controller.webViewController.runJavascript("""
-window.__suppoetedCommands = ["a", "getQrStringFromCamera"];
-              """);
-            }
-          }),
+      appBar: AppBar(title: const Text('Flutter Simple Example')),
+      body: WebViewWidget(controller: _controller),
     );
   }
-
-  ///SPAにレスポンスを返却する
-  void _returnCommand(String requestId, dynamic result) {
-    var encordedResult = jsonEncode(result);
-    _controller.webViewController.runJavascript("""
-__nativecallback('$requestId', $encordedResult);
-              """);
-  }
-
-  void _commandA(Request request) {
-    var text = request.parameters['text'];
-    _returnCommand(request.requestId, {'text': 'command A. text=$text'});
-  }
-
-  Future<void> _commandB(Request request) async {
-    final result = await Navigator.push<String>(context,
-        MaterialPageRoute(builder: (BuildContext context) {
-      return const Scaffold(body: QRCodeReaderPage());
-    }));
-
-    _returnCommand(request.requestId, result);
-    // _returnCommand(request.requestId, "Coomand B.");
-  }
-
-  bool _isAllowUrl(String url) {
-    //todo ★適当な実装("localhost"が含まれているかどうか)
-    return url.startsWith("http://localhost");
-  }
-}
-
-/// SPAからNativeに送信されるリクエスト
-class Request {
-  final String command;
-  final String requestId;
-  final Map<String, dynamic> parameters;
-
-  Request(this.command, this.requestId, this.parameters);
-
-  Request.fromJson(Map<String, dynamic> json)
-      : command = json['command'],
-        requestId = json['requestId'],
-        parameters = json['parameters'];
-}
-
-/// NativeからNativeに送信されるレスポンス
-class Result {
-  final String requestId;
-  final dynamic result;
-
-  Result(this.requestId, this.result);
-
-  Map<String, dynamic> toJson() => {
-        'requestId': requestId,
-        'result': result,
-      };
 }
